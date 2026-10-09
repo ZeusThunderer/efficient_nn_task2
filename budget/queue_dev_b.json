@@ -1,0 +1,136 @@
+{
+  "runs": [
+    {
+      "cut_class": "dev",
+      "deps": [
+        "dev-L1-R56B.PRUNE.s0"
+      ],
+      "enabled": true,
+      "epochs": 40,
+      "group": "dev",
+      "overrides": {
+        "cfg_name": "L1-R56B",
+        "dataset": "cifar10",
+        "dep_id": "dev-L1-R56B.PRUNE.s0",
+        "do_eval": true,
+        "epochs": 40,
+        "force_epochs": false,
+        "group": "dev",
+        "hparams_hash": "dev",
+        "kappa_max": 2.0,
+        "lr": 0.001,
+        "lr_schedule": "constant",
+        "method": "l1",
+        "mode": "FT",
+        "model": "resnet56",
+        "precision": "bf16",
+        "run_id": "dev-L1-R56B.FT.lr0001.s0",
+        "seed": 0,
+        "slim_lambda": 0.0001,
+        "split": "dev",
+        "tracking": true
+      },
+      "priority": 949960,
+      "run_id": "dev-L1-R56B.FT.lr0001.s0"
+    },
+    {
+      "cut_class": "dev",
+      "deps": [
+        "dev-SL-V19-70.PRUNE.l1e-4.s0"
+      ],
+      "enabled": true,
+      "epochs": 40,
+      "group": "dev",
+      "overrides": {
+        "cfg_name": "SL-V19-70",
+        "dataset": "cifar10",
+        "dep_id": "dev-SL-V19-70.PRUNE.l1e-4.s0",
+        "do_eval": true,
+        "epochs": 40,
+        "force_epochs": false,
+        "group": "dev",
+        "hparams_hash": "dev",
+        "kappa_max": 2.0,
+        "lr": 0.001,
+        "lr_schedule": "constant",
+        "method": "slimming",
+        "mode": "FT",
+        "model": "vgg19",
+        "precision": "bf16",
+        "run_id": "dev-SL-V19-70.FT.lr0001.s0",
+        "seed": 0,
+        "slim_lambda": 0.0001,
+        "split": "dev",
+        "tracking": true
+      },
+      "priority": 949960,
+      "run_id": "dev-SL-V19-70.FT.lr0001.s0"
+    },
+    {
+      "cut_class": "dev",
+      "deps": [
+        "dev-L1-R56B.PRUNE.s0"
+      ],
+      "enabled": true,
+      "epochs": 40,
+      "group": "dev",
+      "overrides": {
+        "cfg_name": "L1-R56B",
+        "dataset": "cifar10",
+        "dep_id": "dev-L1-R56B.PRUNE.s0",
+        "do_eval": true,
+        "epochs": 40,
+        "force_epochs": false,
+        "group": "dev",
+        "hparams_hash": "dev",
+        "kappa_max": 2.0,
+        "lr": 0.01,
+        "lr_schedule": "constant",
+        "method": "l1",
+        "mode": "FT",
+        "model": "resnet56",
+        "precision": "bf16",
+        "run_id": "dev-L1-R56B.FT.lr001.s0",
+        "seed": 0,
+        "slim_lambda": 0.0001,
+        "split": "dev",
+        "tracking": true
+      },
+      "priority": 949960,
+      "run_id": "dev-L1-R56B.FT.lr001.s0"
+    },
+    {
+      "cut_class": "dev",
+      "deps": [
+        "dev-SL-V19-70.PRUNE.l1e-4.s0"
+      ],
+      "enabled": true,
+      "epochs": 40,
+      "group": "dev",
+      "overrides": {
+        "cfg_name": "SL-V19-70",
+        "dataset": "cifar10",
+        "dep_id": "dev-SL-V19-70.PRUNE.l1e-4.s0",
+        "do_eval": true,
+        "epochs": 40,
+        "force_epochs": false,
+        "group": "dev",
+        "hparams_hash": "dev",
+        "kappa_max": 2.0,
+        "lr": 0.01,
+        "lr_schedule": "constant",
+        "method": "slimming",
+        "mode": "FT",
+        "model": "vgg19",
+        "precision": "bf16",
+        "run_id": "dev-SL-V19-70.FT.lr001.s0",
+        "seed": 0,
+        "slim_lambda": 0.0001,
+        "split": "dev",
+        "tracking": true
+      },
+      "priority": 949960,
+      "run_id": "dev-SL-V19-70.FT.lr001.s0"
+    }
+  ]
+}

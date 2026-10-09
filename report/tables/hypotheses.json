@@ -1,0 +1,115 @@
+{
+  "H1": "\u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e",
+  "H1_rows": [
+    {
+      "cfg": "L1-V16A",
+      "sb_minus_ft": null,
+      "se_minus_ft": null
+    },
+    {
+      "cfg": "L1-R56A",
+      "sb_minus_ft": null,
+      "se_minus_ft": null
+    },
+    {
+      "cfg": "L1-R56B",
+      "sb_minus_ft": null,
+      "se_minus_ft": null
+    },
+    {
+      "cfg": "SL-V19-70",
+      "sb_minus_ft": null,
+      "se_minus_ft": null
+    },
+    {
+      "cfg": "SL-R56-60",
+      "sb_minus_ft": null,
+      "se_minus_ft": null
+    }
+  ],
+  "H1c": "\u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e",
+  "H1c_rows": [
+    {
+      "cfg": "L1-V16A",
+      "wt_minus_se": null
+    },
+    {
+      "cfg": "L1-R56A",
+      "wt_minus_se": null
+    },
+    {
+      "cfg": "L1-R56B",
+      "wt_minus_se": null
+    }
+  ],
+  "H2_budget": "\u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e",
+  "H2_budget_hits": 0,
+  "H2_budget_total": 0,
+  "H2_curve": "\u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e",
+  "H2_curve_rows": [
+    {
+      "cfg": "SL-R56-40",
+      "sb_minus_ft": null
+    },
+    {
+      "cfg": "SL-R56-60",
+      "sb_minus_ft": null
+    },
+    {
+      "cfg": "SL-R56-80",
+      "sb_minus_ft": null
+    }
+  ],
+  "H2_sbu_minus_ft": null,
+  "H3_gd": "\u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e",
+  "H3_gd_rows": [
+    {
+      "gd_minus_sl": null,
+      "gd_minus_uf": null,
+      "point": "30"
+    },
+    {
+      "gd_minus_sl": null,
+      "gd_minus_uf": null,
+      "point": "50"
+    },
+    {
+      "gd_minus_sl": null,
+      "gd_minus_uf": null,
+      "point": "70"
+    }
+  ],
+  "H3_resnet": "\u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e",
+  "H3_resnet_rows": [
+    {
+      "abs_sl_minus_uf": null,
+      "point": "40"
+    },
+    {
+      "abs_sl_minus_uf": null,
+      "point": "60"
+    },
+    {
+      "abs_sl_minus_uf": null,
+      "point": "80"
+    }
+  ],
+  "H3_vgg": "\u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e",
+  "H3_vgg_rows": [
+    {
+      "point": "30",
+      "sl_minus_uf": null
+    },
+    {
+      "point": "50",
+      "sl_minus_uf": null
+    },
+    {
+      "point": "70",
+      "sl_minus_uf": null
+    }
+  ],
+  "H4": "\u043d\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e",
+  "H4_un80_sb_minus_ft": null,
+  "H4_un95_sb_minus_ft": null
+}

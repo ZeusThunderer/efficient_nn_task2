@@ -1,0 +1,16 @@
+{
+  "augment": "crop4_hflip_persample",
+  "base_lr": 0.1,
+  "batch_size": 128,
+  "epochs_base": 160,
+  "epochs_ft": 40,
+  "hash": "52a438d6f5dbe86a",
+  "kappa_max": 2,
+  "lr_ft": 0.001,
+  "momentum": 0.9,
+  "optimizer": "sgd_nesterov",
+  "precision": "bf16",
+  "slim_lambda_resnet": 1e-05,
+  "slim_lambda_vgg": 0.0001,
+  "weight_decay": 0.0001
+}

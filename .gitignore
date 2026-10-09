@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Reproduction artifacts
+.venv/
+outputs/
+.aim/
+data/
+budget/locks/
+logs/
+*.pt

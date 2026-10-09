@@ -1,0 +1,1 @@
+run_id,cfg,mode,seed,dataset,test_acc,params,macs,epochs,E_B,hparams_hash

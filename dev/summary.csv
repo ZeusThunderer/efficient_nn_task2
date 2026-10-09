@@ -1,0 +1,11 @@
+run_id,model,dataset,val_acc,paper,gap
+dev-V16.BASE.s0,vgg16,cifar10,92.6800,93.63,-0.9500
+dev-V19.BASE.s0,vgg19,cifar10,92.5800,93.53,-0.9500
+dev-R56.BASE.s0,resnet56,cifar10,92.2000,93.14,-0.9400
+dev-V19C100.BASE.s0,vgg19,cifar100,70.3600,72.63,-2.2700
+dev-V16.BASE.fp32.s0,vgg16,cifar10,92.8200,93.63,-0.8100
+
+lambda_vgg,0.0001,tag,l1e-4
+lambda_resnet,1e-05,tag,l1e-5
+lr_ft,0.001
+precision,bf16,bf16_minus_fp32,-0.1400

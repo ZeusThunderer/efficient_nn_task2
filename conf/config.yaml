@@ -1,0 +1,29 @@
+run_id: debug
+mode: BASE
+model: vgg16
+dataset: cifar10
+seed: 1
+split: full
+cfg_name: V16
+method: none
+precision: bf16
+lr_schedule: stepwise
+lr: 0.1
+epochs: 160
+dep_id: none
+kappa_max: 2.0
+slim_lambda: 0.0001
+tracking: true
+do_eval: true
+force_epochs: false
+hparams_hash: dev
+group: ""
+output_root: outputs
+data_root: data
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+  job:
+    chdir: false

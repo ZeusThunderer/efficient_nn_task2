@@ -1,0 +1,19 @@
+{
+  "k": 1,
+  "parallel_wall_s": 48.24393584400241,
+  "peak_mem_mb": 4632,
+  "phi": 1.0,
+  "serial_epoch_s": {
+    "smoke-R56.BASE.s0": 10.141712714001187,
+    "smoke-V16.BASE.s0": 3.847704148498451,
+    "smoke-V16A.SE.s0": 3.2646953485018457,
+    "smoke-V19.BASE.s0": 4.610895606001577
+  },
+  "t_ep": {
+    "resnet56": 10.141712714001187,
+    "vgg16": 3.847704148498451,
+    "vgg19": 4.610895606001577
+  },
+  "t_ep_vgg16_pruned": 3.2646953485018457,
+  "k_note": "phi stayed 1: parallel wall did not beat the sum of epoch times, so the queue runs one job"
+}
