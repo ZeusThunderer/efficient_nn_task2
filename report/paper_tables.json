@@ -1,0 +1,66 @@
+{
+  "source": "arXiv:1810.05270v2, Liu et al., ICLR 2019. Values transcribed from the PDF. Accuracy in percent, mean over 5 seeds.",
+  "table1_l1_cifar10": [
+    {"model": "VGG-16", "unpruned": 93.63, "pruned": "VGG-16-A", "ft": 93.41, "se": 93.62, "sb": 93.78},
+    {"model": "ResNet-56", "unpruned": 93.14, "pruned": "ResNet-56-A", "ft": 92.97, "se": 92.96, "sb": 93.09},
+    {"model": "ResNet-56", "unpruned": 93.14, "pruned": "ResNet-56-B", "ft": 92.67, "se": 92.54, "sb": 93.05}
+  ],
+  "table4_slimming_cifar": [
+    {"dataset": "CIFAR-10", "model": "VGG-19", "unpruned": 93.53, "ratio": "70%", "ft": 93.60, "se": 93.30, "sb": 93.81},
+    {"dataset": "CIFAR-10", "model": "PreResNet-164", "unpruned": 95.04, "ratio": "40%", "ft": 94.77, "se": 94.70, "sb": 94.90},
+    {"dataset": "CIFAR-10", "model": "PreResNet-164", "unpruned": 95.04, "ratio": "60%", "ft": 94.23, "se": 94.58, "sb": 94.71},
+    {"dataset": "CIFAR-10", "model": "DenseNet-40", "unpruned": 94.10, "ratio": "40%", "ft": 94.00, "se": 93.68, "sb": 94.06},
+    {"dataset": "CIFAR-10", "model": "DenseNet-40", "unpruned": 94.10, "ratio": "60%", "ft": 93.87, "se": 93.58, "sb": 93.85},
+    {"dataset": "CIFAR-100", "model": "VGG-19", "unpruned": 72.63, "ratio": "50%", "ft": 72.32, "se": 71.94, "sb": 73.08},
+    {"dataset": "CIFAR-100", "model": "PreResNet-164", "unpruned": 76.80, "ratio": "40%", "ft": 76.22, "se": 76.36, "sb": 76.68},
+    {"dataset": "CIFAR-100", "model": "PreResNet-164", "unpruned": 76.80, "ratio": "60%", "ft": 74.17, "se": 75.05, "sb": 75.73},
+    {"dataset": "CIFAR-100", "model": "DenseNet-40", "unpruned": 73.82, "ratio": "40%", "ft": 73.35, "se": 73.24, "sb": 73.19},
+    {"dataset": "CIFAR-100", "model": "DenseNet-40", "unpruned": 73.82, "ratio": "60%", "ft": 72.46, "se": 72.62, "sb": 72.91}
+  ],
+  "table6_unstructured_cifar10_vgg19": [
+    {"unpruned": 93.50, "ratio": "30%", "ft": 93.51, "se": 93.71, "sb": 93.31},
+    {"unpruned": 93.50, "ratio": "80%", "ft": 93.52, "se": 93.71, "sb": 93.64},
+    {"unpruned": 93.50, "ratio": "95%", "ft": 93.34, "se": 93.21, "sb": 93.63}
+  ],
+  "table6_unstructured_cifar10_preresnet110": [
+    {"unpruned": 95.04, "ratio": "30%", "ft": 95.06, "se": 94.84, "sb": 95.11},
+    {"unpruned": 95.04, "ratio": "80%", "ft": 94.55, "se": 93.76, "sb": 94.52},
+    {"unpruned": 95.04, "ratio": "95%", "ft": 92.35, "se": 91.23, "sb": 91.55}
+  ],
+  "table2_thinet_imagenet_rel_drop": [
+    {"pruned": "VGG-Conv", "ft": -1.23, "se": -2.75, "sb": 0.21},
+    {"pruned": "VGG-GAP", "ft": -3.67, "se": -4.66, "sb": -2.85},
+    {"pruned": "VGG-Tiny", "ft": -11.61, "se": -14.36, "sb": -11.58},
+    {"pruned": "ResNet50-30%", "ft": -6.72, "se": -5.21, "sb": -4.56},
+    {"pruned": "ResNet50-50%", "ft": -4.13, "se": -2.82, "sb": -2.23},
+    {"pruned": "ResNet50-70%", "ft": -3.10, "se": -1.71, "sb": -1.01}
+  ],
+  "table3_regression_imagenet_rel_drop": [
+    {"pruned": "VGG-16-5x", "ft": -2.67, "se": -3.46, "sb": -0.51},
+    {"pruned": "ResNet-50-2x", "ft": -3.25, "se": -1.55, "sb": -1.07}
+  ],
+  "table5_sss_imagenet": [
+    {"pruned": "ResNet-41", "ft": 75.44, "se": 75.61, "sb": 76.17},
+    {"pruned": "ResNet-32", "ft": 74.18, "se": 73.77, "sb": 74.67},
+    {"pruned": "ResNet-26", "ft": 71.82, "se": 72.55, "sb": 73.41}
+  ],
+  "table7_vgg16_slimming_60": {
+    "note": "Table 7: VGG-16 on CIFAR-10, Network Slimming, 60% of channels pruned, width averaged over 5 runs",
+    "width": [64, 64, 128, 128, 256, 256, 256, 512, 512, 512, 512, 512, 512],
+    "width_pruned": [39.0, 64.0, 127.8, 128.0, 255.0, 250.5, 226.0, 217.3, 120.0, 63.0, 47.8, 62.0, 88.8]
+  },
+  "table9_lth_one_shot_lr01_vgg16": [
+    {"ratio": "20%", "winning": 93.66, "random": 93.79},
+    {"ratio": "40%", "winning": 93.79, "random": 93.77},
+    {"ratio": "60%", "winning": 93.60, "random": 93.72},
+    {"ratio": "80%", "winning": 93.74, "random": 93.72},
+    {"ratio": "95%", "winning": 93.18, "random": 93.05}
+  ],
+  "table9_lth_one_shot_lr001_vgg16": [
+    {"ratio": "20%", "winning": 92.78, "random": 92.52},
+    {"ratio": "40%", "winning": 92.80, "random": 92.52},
+    {"ratio": "60%", "winning": 92.72, "random": 92.44},
+    {"ratio": "80%", "winning": 92.75, "random": 92.07},
+    {"ratio": "95%", "winning": 92.58, "random": 91.83}
+  ]
+}
