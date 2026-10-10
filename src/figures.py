@@ -48,10 +48,16 @@ class Ours:
         values = self.accs(cfg, mode)
         return statistics.stdev(values) if len(values) > 1 else 0.0
 
-    def params(self, cfg: str, mode: str):
+    def params(self, cfg: str, mode: str, seed: int | None = None):
         for r in self.runs:
-            if r["cfg"] == cfg and r["mode"] == mode:
+            if r["cfg"] == cfg and r["mode"] == mode and (seed is None or int(r["seed"]) == seed):
                 return int(float(r["params"]))
+        return None
+
+    def acc_seed(self, cfg: str, mode: str, seed: int):
+        for r in self.runs:
+            if r["cfg"] == cfg and r["mode"] == mode and int(r["seed"]) == seed:
+                return float(r["test_acc"])
         return None
 
 
@@ -69,7 +75,7 @@ def _save(fig, name: str) -> Path:
 
 def pipeline() -> Path:
     fig, ax = plt.subplots(figsize=(10, 3.4))
-    ax.set_xlim(0, 10)
+    ax.set_xlim(-0.3, 10.3)
     ax.set_ylim(0, 3.4)
     ax.axis("off")
 
@@ -161,8 +167,8 @@ def ours_h1(ours: Ours) -> Path:
     ax.set_xticks(range(len(cfgs)))
     ax.set_xticklabels([c + ("*" if c.startswith("L1") else "") for c in cfgs], fontsize=9)
     ax.set_ylim(89.5, 94)
-    ax.set_ylabel("точность на тесте, %")
-    ax.set_title("Наши результаты, 5 основных конфигов (среднее и std по 2 сидам)")
+    ax.set_ylabel("точность на тесте, %\n(ось Y обрезана: 89.5–94)")
+    ax.set_title("Мои результаты, 5 основных конфигов (среднее и std по 2 сидам)")
     ax.legend(fontsize=8, ncol=3, loc="upper left")
     return _save(fig, "ours_h1.png")
 
@@ -175,7 +181,7 @@ def ours_slim_resnet(ours: Ours) -> Path:
         ax.plot([int(p) for p in points], ys, marker="o", color=COLORS[mode], label=LABEL[mode])
     ax.set_xlabel("доля обрезанных внутренних каналов, %")
     ax.set_ylabel("точность на тесте, %")
-    ax.set_title("ResNet-56, Network Slimming: разрыв растёт с прунингом")
+    ax.set_title("ResNet-56, Slimming: разрыв растёт с прунингом\n(60%: среднее по 2 сидам; UF и 40/80%: сид 1)")
     ax.set_xticks([40, 60, 80])
     ax.legend(fontsize=8)
     return _save(fig, "ours_slim_resnet.png")
@@ -188,9 +194,9 @@ def ours_vgg_uf(ours: Ours) -> Path:
     for p in points:
         sl_cfg = f"SL-V19-{p}"
         uf_cfg = f"UF-V19-{p}"
-        s_acc = ours.mean(sl_cfg, "SE")
-        u_acc = ours.mean(uf_cfg, "UF")
-        s_par = ours.params(sl_cfg, "SE")
+        s_acc = ours.acc_seed(sl_cfg, "SE", 1)
+        u_acc = ours.acc_seed(uf_cfg, "UF", 1)
+        s_par = ours.params(sl_cfg, "SE", 1)
         u_par = ours.params(uf_cfg, "UF")
         if None in (s_acc, u_acc, s_par, u_par):
             continue
@@ -202,7 +208,7 @@ def ours_vgg_uf(ours: Ours) -> Path:
     ax.plot(uf_p, uf_a, marker="s", color=COLORS["UF"], label="uniform (с нуля)")
     ax.set_xlabel("параметров, млн")
     ax.set_ylabel("точность на тесте, %")
-    ax.set_title("VGG-19, CIFAR-10: аналог рис. 3 статьи")
+    ax.set_title("VGG-19, CIFAR-10, сид 1: аналог рис. 3 (в статье VGG-16)")
     ax.legend(fontsize=8)
     return _save(fig, "ours_vgg_uf.png")
 
@@ -235,7 +241,7 @@ def ours_unstructured(ours: Ours) -> Path:
     ax.set_xticks(range(len(cfgs)))
     ax.set_xticklabels(cfgs, fontsize=9)
     ax.set_ylim(85, 94.5)
-    ax.set_ylabel("точность на тесте, %")
+    ax.set_ylabel("точность на тесте, %\n(ось Y обрезана: 85–94.5)")
     ax.set_title("Нерегулярный прунинг (сид 1)")
     ax.legend(fontsize=8)
     return _save(fig, "ours_unstructured.png")

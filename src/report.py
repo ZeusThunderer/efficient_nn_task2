@@ -90,6 +90,64 @@ def _n(ours: Ours, cfg: str, mode: str) -> int:
     return len(ours.accs(cfg, mode))
 
 
+def _macs_of(ours: Ours, cfg: str) -> int | None:
+    for r in ours.runs:
+        if r["cfg"] == cfg:
+            return int(float(r["macs"]))
+    return None
+
+
+def _macs_cut(ours: Ours, cfg: str, base: str) -> str:
+    small, large = _macs_of(ours, cfg), _macs_of(ours, base)
+    if small is None or large is None:
+        return "нет"
+    return f"−{(1 - small / large) * 100:.1f}"
+
+
+def _capped(data: dict) -> str:
+    """Configs whose F_L / F_P exceeds the 2x cap on Scratch-B epochs (from PRUNE rows of runs.csv)."""
+    ours: Ours = data["ours"]
+    base_macs = {}
+    for r in data["runs"]:
+        if r["mode"] == "BASE" and r["seed"] == "1":
+            base_macs[r["cfg"]] = float(r["macs"])
+    seen: dict[str, list[str]] = {}
+    for r in data["runs"]:
+        if r["mode"] != "PRUNE":
+            continue
+        base = "V19" if "V19" in r["cfg"] else "V16" if "V16" in r["cfg"] else "R56"
+        ratio = base_macs[base] / float(r["macs"])
+        if ratio > 2:
+            seen.setdefault(r["cfg"], []).append(f"{ratio:.2f} (сид {r['seed']})")
+    return "; ".join(f"{cfg}: F_L/F_P = " + ", ".join(v) for cfg, v in seen.items())
+
+
+def _lat_fp16(lat: list[dict], ours: Ours) -> str:
+    def v(run: str, batch: str, dtype: str = "fp16") -> float:
+        return float(next(r["median_ms"] for r in lat if r["run_id"] == run and r["batch"] == batch and r["dtype"] == dtype))
+
+    r56 = ["L1-R56A", "L1-R56B", "SL-R56-40", "SL-R56-60", "SL-R56-80"]
+    v19 = ["SL-V19-30", "SL-V19-50", "SL-V19-70"]
+    lo256, hi256 = min(v(f"{c}.SE.s1", "256") for c in r56), max(v(f"{c}.SE.s1", "256") for c in r56)
+    lo1, hi1 = min(v(f"{c}.SE.s1", "1") for c in r56), max(v(f"{c}.SE.s1", "1") for c in r56)
+    base256, base1 = v("R56.BASE.s1", "256"), v("R56.BASE.s1", "1")
+    assert lo256 > base256 and lo1 > base1
+    sl30, v19_256 = v("SL-V19-30.SE.s1", "256"), v("V19.BASE.s1", "256")
+    assert sl30 > v19_256
+    lo19, hi19 = min(v(f"{c}.SE.s1", "1") for c in v19), max(v(f"{c}.SE.s1", "1") for c in v19)
+    base19_1 = v("V19.BASE.s1", "1")
+    assert lo19 > base19_1
+    return (
+        "FP16 (медианы из таблицы): ни одна обрезанная ResNet-56 не быстрее базы. На batch 256 они занимают "
+        f"{lo256:.2f}–{hi256:.2f} мс против {base256:.2f} у базы, на batch 1 — {lo1:.2f}–{hi1:.2f} против {base1:.2f}. "
+        f"SL-V19-30 на batch 256 даёт {sl30:.2f} мс против {v19_256:.2f} у V19 при {_macs_cut(ours, 'SL-V19-30', 'V19')}% MAC. "
+        f"На batch 1 все SL-V19 ({lo19:.2f}–{hi19:.2f} мс) медленнее базы ({base19_1:.2f} мс). "
+        "Вывод про ускорение прунингом поэтому справедлив для FP32, но не для FP16. "
+        "Гипотеза, не проверялась: ширины после прунинга не кратны 8 и выпадают из tensor-core путей. "
+        "Проверка (округлить ширины вверх до кратных 8 и перемерить) не проводилась."
+    )
+
+
 def _signed(value) -> str:
     if value is None or value == "":
         return "нет"
@@ -213,7 +271,7 @@ def write_slides(data: dict, path: Path) -> None:
         [
             "Liu, Sun, Zhou, Huang, Darrell. ICLR 2019, arXiv:1810.05270",
             "Разбор статьи: что утверждают авторы, как проверяют и что из этого следует",
-            "В конце: что получилось при нашем воспроизведении на CIFAR",
+            "В конце: что получилось при моём воспроизведении на CIFAR",
         ],
         size=18,
     )
@@ -272,7 +330,7 @@ def write_slides(data: dict, path: Path) -> None:
             "Automatic структурированные: Network Slimming (Liu et al.), Sparse Structure Selection (Huang, Wang).",
             "Нерегулярный: magnitude pruning (Han et al.), только веса свёрток.",
             "Данные: CIFAR-10, CIFAR-100, ImageNet. Сети: VGG, ResNet, DenseNet, PreResNet. Отдельно перенос на детекцию (приложение B).",
-            "Мы воспроизводим CIFAR-часть: L1-norm, Network Slimming, Han, сравнение с uniform и guided, Lottery Ticket.",
+            "Запущено: L1-norm, Network Slimming, Han, uniform. Планировал, не успел: guided pruning, Lottery Ticket, CIFAR-100.",
         ],
         size=14,
     )
@@ -334,7 +392,7 @@ def write_slides(data: dict, path: Path) -> None:
         "Сводка: обучение с нуля против fine-tune",
         [
             "Положительная разница Scratch-B означает, что обучение с нуля выигрывает у fine-tune.",
-            "Структурированные методы: разница в основном положительная и небольшая, десятые доли п.п.",
+            "Scratch-B−FT в основном положительная, Scratch-E−FT знакопеременная; величины порядка десятых долей п.п.",
         ],
         image=figs["paper_deltas"],
         image_w=190,
@@ -357,7 +415,7 @@ def write_slides(data: dict, path: Path) -> None:
     s.slide(
         "Когда архитектура не лучше uniform. Guided и перенос",
         [
-            "У ResNet и DenseNet найденные архитектуры почти равномерны по стадиям (таблицы 18–20). Там прунинг не лучше uniform (рис. 5).",
+            "У PreResNet-164 (Slimming) и у PreResNet-110, DenseNet-40 (нерегулярный прунинг) найденные архитектуры почти равномерны по стадиям (таблицы 18–20). Там прунинг не лучше uniform (рис. 5).",
             "У VGG избыточность неравномерна (таблица 21), и найденная архитектура всегда лучше uniform.",
             "Guided pruning: взять среднее число каналов по стадиям из найденных архитектур и построить из этого сеть. Она не уступает найденной (рис. 6).",
             "Transferred guided: шаблон из VGG-16 на CIFAR-10 переносится на VGG-19 на CIFAR-100 и всё равно заметно лучше uniform. Большую сеть для такого дизайна учить не нужно.",
@@ -395,22 +453,23 @@ def write_slides(data: dict, path: Path) -> None:
         "Что слабо в статье",
         [
             "Часть целевых архитектур в оригинальных работах задана неполно, поэтому их приходится восстанавливать.",
-            "Scratch-B получает больше вычислений, чем fine-tune. Авторы это признают и исключают fine-tune из бюджета.",
+            "Бюджет Scratch-B равен обучению большой сети без fine-tune, то есть меньше полного конвейера (обучение + fine-tune). Авторы называют это уступкой в пользу прунинга.",
+            "Возражение «fine-tune 40 эпох мало» снято в приложении D статьи: в таблице 16 fine-tune 80 и 160 эпох заметного прироста не дают.",
             "Результаты на CIFAR отличаются на десятые доли п.п., а std такого же порядка. Выводы статистические, а не «железные».",
             "ImageNet показывает исключение для нерегулярного прунинга, но не объясняет его до конца.",
-            "Это наша оценка, а не цитата из статьи.",
+            "Это моя оценка, а не цитата из статьи.",
         ],
         size=14,
     )
 
     # --- our reproduction
     s.slide(
-        "Наше воспроизведение: что сделали",
+        "Моё воспроизведение: что я сделал",
         [
             "Одна RTX 5070 Ti, один общий цикл обучения для всех режимов, гиперпараметры заморожены на dev-сплите до запуска тестов.",
-            "Сети: VGG-16/19 и ResNet-56 на CIFAR-10. L1-norm, Network Slimming, Han, uniform. Три конфига L1 (VGG-16-A, ResNet-56-A/B) в статье заданы неполно, мы восстановили их сами и пометили звёздочкой.",
+            "Сети: VGG-16/19 и ResNet-56 на CIFAR-10. L1-norm, Network Slimming, Han, uniform. Три конфига L1 (VGG-16-A, ResNet-56-A/B) в статье заданы неполно, я восстановил их сам и пометил звёздочкой.",
             "Основные 5 конфигов прошли по 2 сида, остальные по 1. Статья: 5 сидов.",
-            "Не успели по бюджету GPU: сид 3, CIFAR-100, guided pruning, winning ticket, Scratch-B без потолка 2×.",
+            "Не успел по бюджету GPU: сид 3, CIFAR-100, guided pruning, winning ticket, Scratch-B без потолка 2×.",
         ],
         size=14,
     )
@@ -424,31 +483,34 @@ def write_slides(data: dict, path: Path) -> None:
             + " п.п. Лучше всего SL-R56-60: SB−FT = "
             + _delta(ours, "SL-R56-60", "SB", "FT")
             + " п.п.",
+            "n=2, std 0.01–0.87 п.п. (по 5 конфигам и трём режимам) сопоставим с порогами критерия, поэтому «подтверждена» читать как «согласуется со статьёй». Ось Y на графике обрезана.",
         ],
         image=figs["ours_h1"],
-        image_w=170,
+        image_w=150,
         size=14,
     )
 
+    sl_uf_res = ", ".join(f"{r['point']}%: {r['abs_sl_minus_uf']:+.2f}" for r in hyp.get("H3_resnet_rows", []))
     s.slide(
         "Воспроизведение: архитектура против uniform",
         [
-            f"VGG-19, критерий H3: {hyp.get('H3_vgg', 'нет данных')}. Архитектура Slimming выигрывает у uniform на 0.7–2.3 п.п., разрыв растёт с прунингом.",
-            "Поздние стадии режутся сильнее, как в таблице 21 статьи.",
-            f"ResNet-56: у статьи Slimming ≈ uniform ({hyp.get('H3_resnet', 'нет данных')} у нас). Наши найденные ширины не равномерны по стадиям, поэтому разрыв остаётся.",
+            f"VGG-19, критерий H3: {hyp.get('H3_vgg', 'нет данных')}. SL−UF (сид 1) = " + ", ".join(f"{r['sl_minus_uf']:+.2f}" for r in hyp.get("H3_vgg_rows", [])) + " п.п. при 30/50/70%. Это аналог рис. 3 на VGG-19 (в статье рис. 3 построен на VGG-16).",
+            "Поздние стадии режутся сильнее, как в таблице 21 статьи (VGG-16).",
+            "В статье паритет со Slimming виден на PreResNet-164 (рис. 5 слева, таблица 18); Slimming на ResNet-56 там нет. Паритет нерегулярного прунинга с uniform — на PreResNet-110 и DenseNet-40 (рис. 5 справа и в центре).",
+            f"У меня на ResNet-56 разрыв SL−UF остаётся (сид 1; 40/60/80%: {sl_uf_res}): ширины неравномерны, размах по стадиям 0.37–0.39. Вердикт H3 для ResNet: {hyp.get('H3_resnet', 'нет данных')}.",
         ],
         image=figs["ours_vgg_uf"],
-        image_w=105,
+        image_w=95,
         layout="right",
-        size=13,
+        size=12,
     )
 
     s.slide(
         "Воспроизведение: что не совпало со статьёй",
         [
-            "Абсолютная точность базовых VGG на тесте ниже статьи на 0.7–0.8 п.п., у ResNet-56 на 0.1 п.п.; причину не установили. Сравнение внутри нашего цикла остаётся честным.",
-            f"H4 {hyp.get('H4', 'нет данных')}: на ResNet-56 при 95% нерегулярный Scratch-B выше fine-tune на {hyp.get('H4_un95_sb_minus_ft', 0):+.2f} п.п., хотя ждали обратного.",
-            "Возможное объяснение, не проверенное у нас: fine-tune 40 эпох на сильно разреженной сети недообучается.",
+            "Абсолютная точность базовых VGG на тесте ниже статьи на 0.7–0.8 п.п., у ResNet-56 на 0.1 п.п.; причину не установил. Сравнение внутри моего цикла остаётся честным.",
+            f"H4 {hyp.get('H4', 'нет данных')}: на ResNet-56 при 95% нерегулярный Scratch-B выше fine-tune на {hyp.get('H4_un95_sb_minus_ft', 0):+.2f} п.п. H4 опиралась на перенос поведения PreResNet-110 на ResNet-56; это моё допущение, а не результат статьи.",
+            "Предполагаю (не проверял): fine-tune 40 эпох на сильно разреженной сети недообучается.",
             "Winning ticket и guided pruning в итог не вошли: эти прогоны вырезаны бюджетом.",
         ],
         size=14,
@@ -459,7 +521,7 @@ def write_slides(data: dict, path: Path) -> None:
         [
             "Главный тезис для структурированного прунинга воспроизвёлся на CIFAR-10: обучение с нуля при бюджете Scratch-B не хуже fine-tune, а чаще лучше.",
             "Архитектура, найденная Slimming на VGG-19, лучше uniform при том же числе параметров.",
-            "Исключение для нерегулярного прунинга мы не воспроизвели: наши результаты на ResNet-56 при 95% идут в обратную сторону.",
+            f"Исключение для нерегулярного прунинга в статье — ImageNet и 95% на PreResNet-110 и DenseNet-BC-100; их я не проверял. На VGG-19 95% и у статьи, и у меня Scratch-B ≥ fine-tune. Мой аналог на ResNet-56 (H4) опровергнут: SB−FT {hyp.get('H4_un95_sb_minus_ft', 0):+.2f} п.п.",
             "Полный отчёт со всеми таблицами, отклонениями и ограничениями: report/report.pdf.",
         ],
         size=15,
@@ -469,9 +531,9 @@ def write_slides(data: dict, path: Path) -> None:
 
 # ---------------------------------------------------------------- report
 
-def _comparison_table(ours: Ours, paper_rows: list[dict], our_rows: list[tuple[str, str, str]], label_paper) -> list[list[str]]:
+def _comparison_table(ours: Ours, paper_rows: list[dict], our_rows: list[tuple[str, str, str]], label_paper, with_macs: bool = False) -> list[list[str]]:
     """our_rows: (display label, cfg, base cfg)."""
-    rows = [["Строка", "Исходная", "Fine-tune", "Scratch-E", "Scratch-B", "SE−FT", "SB−FT"]]
+    rows = [["Строка", "Исходная", "Fine-tune", "Scratch-E", "Scratch-B", "SE−FT", "SB−FT"] + (["−MACs, %"] if with_macs else [])]
     for pr in paper_rows:
         rows.append([
             label_paper(pr),
@@ -481,7 +543,7 @@ def _comparison_table(ours: Ours, paper_rows: list[dict], our_rows: list[tuple[s
             f"{pr['sb']:.2f}",
             f"{pr['se'] - pr['ft']:+.2f}",
             f"{pr['sb'] - pr['ft']:+.2f}",
-        ])
+        ] + (["—"] if with_macs else []))
     for label, cfg, base in our_rows:
         base_mode = "BASES" if cfg.startswith("SL") else "BASE"
         rows.append([
@@ -492,8 +554,11 @@ def _comparison_table(ours: Ours, paper_rows: list[dict], our_rows: list[tuple[s
             _ms(ours, cfg, "SB"),
             _delta(ours, cfg, "SE", "FT"),
             _delta(ours, cfg, "SB", "FT"),
-        ])
+        ] + ([_macs_cut(ours, cfg, base)] if with_macs else []))
     return rows
+
+
+FOOTNOTE = "Разности считаются по нескруглённым значениям; в таблицах показаны округлённые средние."
 
 
 def write_report(data: dict, path: Path) -> None:
@@ -513,7 +578,7 @@ def write_report(data: dict, path: Path) -> None:
         "Статья утверждает, что для структурированного прунинга дообучение унаследованных весов не лучше, "
         "чем обучение той же архитектуры с нуля при сопоставимом бюджете. Найденная прунингом архитектура, а не веса, "
         "даёт выигрыш. Для нерегулярного прунинга авторы видят исключение на ImageNet и при высокой разреженности. "
-        "Мы проверяем это на CIFAR и формулируем четыре гипотезы."
+        "Я проверяю это на CIFAR и формулирую четыре гипотезы."
     )
     d.table(
         [
@@ -538,7 +603,7 @@ def write_report(data: dict, path: Path) -> None:
         "Режимы одной конфигурации: база (160 эпох) → прунинг → Fine-tune (40 эпох, постоянный lr) | Scratch-E (160 эпох, He-инициализация) | "
         "Scratch-B. Для Scratch-B число эпох E_B = 4·round(160·κ/4), где κ = min(2, F_L/F_P) и F — число MAC большой и малой сети; "
         "расписание lr растягивается пропорционально (спады на 50% и 75%). Потолок κ = 2 оставлен как в статье для ImageNet; "
-        "на CIFAR это ограничение мы вводим сами и называем Scratch-B (cap 2×)."
+        "на CIFAR это ограничение я ввожу сам и называю Scratch-B (cap 2×)."
     )
     d.text_block(
         "Общий цикл: SGD с Нестеровым, momentum 0.9, weight decay 1e-4, batch 128, lr 0.1, аугментация — случайный кроп с отступом 4 и "
@@ -555,7 +620,7 @@ def write_report(data: dict, path: Path) -> None:
         "Прунинг: L1 — доля каналов по слою; для ResNet режутся только внутренние каналы блока (conv1/bn1), поток остатка не трогается. "
         "Slimming: L1-штраф на γ BatchNorm добавляется к градиенту в fp32, глобальный top-k по |γ|. "
         "Нерегулярный: глобальный one-shot top-k по |w| только для весов свёрток; маска применяется к градиенту и к весам после шага. "
-        "Uniform: одна доля на все слои, подобранная так, чтобы число параметров совпало с архитектурой Slimming того же сида."
+        "Uniform: одна доля на все слои, подобранная так, чтобы число параметров совпало с архитектурой Slimming сида 1; uniform обучается с нуля 160 эпох (по runs.csv), как Scratch-E."
     )
     d.text_block(
         "Железо: одна RTX 5070 Ti (sm_120), PyTorch 2.11 + CUDA 12.8, без torch.compile. Две обучающие программы одновременно "
@@ -571,7 +636,8 @@ def write_report(data: dict, path: Path) -> None:
         "На dev-сплите (45k обучающих картинок) базовые сети на 0.8–0.95 п.п. ниже статьи на CIFAR-10 и на 2.3 п.п. ниже на CIFAR-100 (VGG-19). "
         "Часть разрыва — меньший обучающий набор; на полном сплите (тест, last epoch) базы такие: VGG-16 92.84, VGG-19 92.84, ResNet-56 93.03 против 93.63, 93.53, 93.14 в статье. "
         "bf16 против FP32 на VGG-16 даёт разницу −0.14 п.п., это внутри порога 0.3, поэтому оставлен bf16. "
-        "Причину отставания от статьи мы не искали; сравнение методов идёт внутри одного нашего цикла."
+        "Причину отставания от статьи я не искал; сравнение методов идёт внутри одного моего цикла. "
+        "Гипотеза, не проверялась: weight decay 1e-4 мало для VGG с BatchNorm; просадка базы только у VGG (−0.7…−0.8 п.п. на тесте), у ResNet-56 −0.1 п.п."
     )
 
     d.add_page()
@@ -580,21 +646,28 @@ def write_report(data: dict, path: Path) -> None:
     l1 = _comparison_table(
         ours,
         paper["table1_l1_cifar10"],
-        [("Наша VGG-16-A*", "L1-V16A", "V16"), ("Наша ResNet-56-A*", "L1-R56A", "R56"), ("Наша ResNet-56-B*", "L1-R56B", "R56")],
+        [("Моя VGG-16-A*", "L1-V16A", "V16"), ("Моя ResNet-56-A*", "L1-R56A", "R56"), ("Моя ResNet-56-B*", "L1-R56B", "R56")],
         lambda r: f"Статья {r['pruned']}",
+        with_macs=True,
     )
-    d.table(l1, [38, 26, 26, 26, 26, 17, 17], size=7.5)
+    d.table(l1, [34, 22, 22, 22, 22, 16, 16, 20], size=7.5)
     d.text_block(
-        "Звёздочка: конфигурации *-A и *-B в PDF заданы ссылкой на Li et al., без слоёв и долей, поэтому мы выбрали их сами "
-        "[ДОПУЩЕНИЕ]: VGG-16-A* режет 50% первого и слоёв 8–13; ResNet-56-A* режет 30% внутренних каналов всех блоков; ResNet-56-B* режет 30% в стадии 1 и 60% в стадиях 2–3. "
-        "Поэтому абсолютные числа строк статьи и наших несопоставимы, сравнивать нужно разности SE−FT и SB−FT. "
-        "Наши: n = 2 сида (± — std по двум сидам). Статьи: 5 сидов."
+        "Разности для моих прогонов считаются по нескруглённым значениям, затем округляются; для статьи — по опубликованным значениям с двумя знаками." " Колонка «−MACs, %» — сокращение MAC относительно базы того же прогона по таблице приложения; для строк статьи значения нет в PDF (конфигурации заданы ссылкой на Li et al.).",
+        8.5,
     )
     d.text_block(
-        "VGG-16-A*: разности близки к статье (у статьи SE−FT +0.21, SB−FT +0.37; у нас "
+        "Звёздочка: конфигурации *-A и *-B в PDF заданы ссылкой на Li et al., без слоёв и долей, поэтому я выбрал их сам. "
+        "Допущение: VGG-16-A* режет 50% первого и слоёв 8–13; ResNet-56-A* режет 30% внутренних каналов всех блоков; ResNet-56-B* режет 30% в стадии 1 и 60% в стадиях 2–3. "
+        "Поэтому абсолютные числа строк статьи и моих несопоставимы, сравнивать нужно разности SE−FT и SB−FT. "
+        "Мои: n = 2 сида (± — std по двум сидам). Статьи: 5 сидов. VGG-16-A* восстановлен мной; он может совпадать с конфигурацией Li et al., но это не проверено (Li et al. нет в приложенном PDF). "
+        "Сопоставимость с таблицей 1 по степени прунинга не проверена."
+    )
+    d.text_block(
+        "VGG-16-A*: разности близки к статье (у статьи SE−FT +0.21, SB−FT +0.37; у меня "
         + _delta(ours, "L1-V16A", "SE", "FT") + " и " + _delta(ours, "L1-V16A", "SB", "FT") + "). "
-        "ResNet-56-A*: у статьи SE−FT −0.01, SB−FT +0.12; у нас " + _delta(ours, "L1-R56A", "SE", "FT") + " и " + _delta(ours, "L1-R56A", "SB", "FT") + ". "
-        "ResNet-56-B*: у статьи −0.13 и +0.38; у нас " + _delta(ours, "L1-R56B", "SE", "FT") + " и " + _delta(ours, "L1-R56B", "SB", "FT") + ". "
+        "ResNet-56-A*: у статьи SE−FT −0.01, SB−FT +0.12; у меня " + _delta(ours, "L1-R56A", "SE", "FT") + " и " + _delta(ours, "L1-R56A", "SB", "FT") + ". "
+        "ResNet-56-B*: у статьи −0.13 и +0.38; у меня " + _delta(ours, "L1-R56B", "SE", "FT") + " и " + _delta(ours, "L1-R56B", "SB", "FT") + ". "
+        "B* режется сильнее всего (" + _macs_cut(ours, "L1-R56B", "R56") + "% MACs против " + _macs_cut(ours, "L1-R56A", "R56") + "% у A*), и именно там SB−FT наибольшая; это согласуется с H2 (разрыв растёт с долей прунинга). Здесь же у B* больше эпох Scratch-B: E_B = 316 против 232 у A*. "
         "Итого Scratch-B не хуже fine-tune в двух конфигах из трёх с запасом, в третьем (A*) проигрыш внутри порога шума. Scratch-E соответствует статье только на VGG-16-A*."
     )
     d.picture(figs["ours_h1"], 150)
@@ -605,23 +678,30 @@ def write_report(data: dict, path: Path) -> None:
         ours,
         sl_rows,
         [
-            ("Наша VGG-19 70%", "SL-V19-70", "V19"),
-            ("Наша ResNet-56 60%", "SL-R56-60", "R56"),
-            ("Наша ResNet-56 40% (n=1)", "SL-R56-40", "R56"),
-            ("Наша ResNet-56 80% (n=1)", "SL-R56-80", "R56"),
+            ("Моя VGG-19 70%", "SL-V19-70", "V19"),
+            ("Моя ResNet-56 60%", "SL-R56-60", "R56"),
+            ("Моя ResNet-56 40% (n=1)", "SL-R56-40", "R56"),
+            ("Моя ResNet-56 80% (n=1)", "SL-R56-80", "R56"),
         ],
         lambda r: f"Статья {r['model']} {r['ratio']}",
     )
     d.table(sl, [38, 26, 26, 26, 26, 17, 17], size=7.5)
+    d.text_block(FOOTNOTE, 8.5)
     d.text_block(
-        "VGG-19 с 70% совпадает с условиями статьи (доля каналов считается по всей сети). Для ResNet-56 доля считается только по внутренним каналам блоков [ДОПУЩЕНИЕ], "
-        "в статье для ResNet-56 Slimming не оценивался, там PreResNet-164 и DenseNet-40, которых у нас нет. Строки ResNet-56 — наши собственные точки."
+        "VGG-19 с 70% совпадает с условиями статьи (доля каналов считается по всей сети). Для ResNet-56 доля считается только по внутренним каналам блоков (допущение), "
+        "в статье для ResNet-56 Slimming не оценивался, там PreResNet-164 и DenseNet-40, которых у меня нет. Строки ResNet-56 — мои собственные точки."
     )
     d.text_block(
-        "VGG-19, 70%: у статьи SB−FT = +0.21, SE−FT = −0.30; у нас SB−FT = " + _delta(ours, "SL-V19-70", "SB", "FT") + ", SE−FT = " + _delta(ours, "SL-V19-70", "SE", "FT") + ". "
-        "SB−FT того же знака, но больше; SE−FT у нас положительная, у статьи отрицательная. На ResNet-56 разрыв растёт с долей прунинга и на 80% достигает "
+        "VGG-19, 70%: у статьи SB−FT = +0.21, SE−FT = −0.30; у меня SB−FT = " + _delta(ours, "SL-V19-70", "SB", "FT") + ", SE−FT = " + _delta(ours, "SL-V19-70", "SE", "FT") + ". "
+        "SB−FT того же знака, но больше; SE−FT у меня положительная, у статьи отрицательная. На ResNet-56 разрыв растёт с долей прунинга и на 80% достигает "
         + _delta(ours, "SL-R56-80", "SB", "FT")
         + " п.п. (n=1). Fine-tune на 80% теряет относительно базы больше 6 п.п."
+    )
+    p13, p14 = paper["table13_aggressive_slimming_cifar10_preresnet56_80"], paper["table14_aggressive_l1_cifar10_resnet56_90"]
+    d.text_block(
+        "Приложение C статьи поддерживает этот результат на агрессивном прунинге: в таблице 13 (PreResNet-56, Slimming 80%) fine-tune "
+        f"{p13['ft']:.2f}, Scratch-E {p13['se']:.2f}, Scratch-B {p13['sb']:.2f}; в таблице 14 (ResNet-56, L1-norm 90%) {p14['ft']:.2f} / {p14['se']:.2f} / {p14['sb']:.2f}. "
+        "Направление то же, что у моей SL-R56-80 (fine-tune " + _ms(ours, "SL-R56-80", "FT") + ", Scratch-E " + _ms(ours, "SL-R56-80", "SE") + ", Scratch-B " + _ms(ours, "SL-R56-80", "SB") + "); сравнивать абсолютные числа нельзя: другие сети и способ задания доли прунинга."
     )
     d.picture(figs["ours_slim_resnet"], 110)
 
@@ -630,53 +710,59 @@ def write_report(data: dict, path: Path) -> None:
         ours,
         [{**r} for r in paper["table6_unstructured_cifar10_vgg19"] if r["ratio"] in ("80%", "95%")],
         [
-            ("Наша VGG-19 80% (n=1)", "UN-V19-80", "V19"),
-            ("Наша VGG-19 95% (n=1)", "UN-V19-95", "V19"),
-            ("Наша ResNet-56 95% (n=1)", "UN-R56-95", "R56"),
+            ("Моя VGG-19 80% (n=1)", "UN-V19-80", "V19"),
+            ("Моя VGG-19 95% (n=1)", "UN-V19-95", "V19"),
+            ("Моя ResNet-56 95% (n=1)", "UN-R56-95", "R56"),
         ],
         lambda r: f"Статья VGG-19 {r['ratio']}",
     )
     d.table(un, [38, 26, 26, 26, 26, 17, 17], size=7.5)
+    d.text_block(FOOTNOTE, 8.5)
     d.text_block(
         "Для VGG-19 сохраняется картина статьи: Scratch-B не хуже fine-tune и на 95%. Для ResNet-56 на 95% (47 тыс. параметров) "
-        "Scratch-B выше fine-tune на 1.7 п.п. В статье на PreResNet-110 при 95% fine-tune лучше. Возможная причина — недообучение fine-tune за 40 эпох на очень "
-        "разреженной сети с постоянным lr 0.001; мы это не проверяли."
+        "Scratch-B выше fine-tune на 1.7 п.п. В статье на PreResNet-110 и DenseNet-BC-100 при 95% fine-tune лучше (таблица 6), а на VGG-19 при 95% Scratch-B лучше, как и у меня. "
+        "Предполагаю, что fine-tune за 40 эпох на очень разреженной сети с постоянным lr 0.001 недообучается; я это не проверял. "
+        "Таблица 16 статьи (приложение D) показывает, что удлинение fine-tune до 80 и 160 эпох не помогает, но только для умеренного L1-прунинга, не для 95% нерегулярного."
     )
     d.picture(figs["ours_unstructured"], 105)
 
     d.add_page()
     d.text_block("4.4. Найденная архитектура против uniform (раздел 5 статьи)", 11, bold=True)
-    uf_rows = [["Конфиг", "Параметров Slimming", "Slimming, с нуля", "Параметров uniform", "Uniform, с нуля", "SL−UF"]]
-    for pt in ("30", "50", "70"):
-        uf_rows.append([
-            f"VGG-19 {pt}%",
-            str(ours.params(f"SL-V19-{pt}", "SE")),
-            _ms(ours, f"SL-V19-{pt}", "SE"),
-            str(ours.params(f"UF-V19-{pt}", "UF")),
-            _ms(ours, f"UF-V19-{pt}", "UF"),
-            f"{ours.mean(f'SL-V19-{pt}', 'SE') - ours.mean(f'UF-V19-{pt}', 'UF'):+.2f}"
-            if ours.mean(f"SL-V19-{pt}", "SE") is not None and ours.mean(f"UF-V19-{pt}", "UF") is not None
-            else "нет",
-        ])
-    for pt in ("40", "60", "80"):
-        uf_rows.append([
-            f"ResNet-56 {pt}%",
-            str(ours.params(f"SL-R56-{pt}", "SE")),
-            _ms(ours, f"SL-R56-{pt}", "SE"),
-            str(ours.params(f"UF-R56-{pt}", "UF")),
-            _ms(ours, f"UF-R56-{pt}", "UF"),
-            f"{ours.mean(f'SL-R56-{pt}', 'SE') - ours.mean(f'UF-R56-{pt}', 'UF'):+.2f}"
-            if ours.mean(f"SL-R56-{pt}", "SE") is not None and ours.mean(f"UF-R56-{pt}", "UF") is not None
-            else "нет",
-        ])
-    d.table(uf_rows, [30, 32, 30, 32, 30, 22], size=8)
+    uf_rows = [["Конфиг", "Парам. SL (сид 1)", "SL, сид 1", "SL, среднее по сидам", "Парам. UF", "UF (сид 1)", "SL−UF (сид 1)"]]
+    for model, pts in (("V19", ("30", "50", "70")), ("R56", ("40", "60", "80"))):
+        for pt in pts:
+            sl_cfg, uf_cfg = f"SL-{model}-{pt}", f"UF-{model}-{pt}"
+            a1, u1 = ours.acc_seed(sl_cfg, "SE", 1), ours.acc_seed(uf_cfg, "UF", 1)
+            n_sl = _n(ours, sl_cfg, "SE")
+            uf_rows.append([
+                f"{'VGG-19' if model == 'V19' else 'ResNet-56'} {pt}%",
+                str(ours.params(sl_cfg, "SE", 1)),
+                f"{a1:.2f}" if a1 is not None else "нет",
+                _ms(ours, sl_cfg, "SE") + (f" (n={n_sl})" if n_sl > 1 else " (n=1)"),
+                str(ours.params(uf_cfg, "UF")),
+                f"{u1:.2f}" if u1 is not None else "нет",
+                f"{a1 - u1:+.2f}" if a1 is not None and u1 is not None else "нет",
+            ])
+    d.table(uf_rows, [26, 24, 18, 36, 24, 18, 20], size=7.5)
+    d.text_block(FOOTNOTE, 8.5)
+    mean70 = ours.mean("SL-V19-70", "SE") - ours.acc_seed("UF-V19-70", "UF", 1)
+    mean60 = ours.mean("SL-R56-60", "SE") - ours.acc_seed("UF-R56-60", "UF", 1)
     d.text_block(
-        "Число параметров uniform подгоняется под архитектуру Slimming того же сида с допуском до 2% (фактически 0.06–1.8%). Для каждой точки по 1 сиду на uniform, поэтому разности без доверительного интервала. "
-        "VGG-19: Slimming выигрывает 0.70, 1.88, 2.27 п.п., что воспроизводит рис. 3 статьи (слева). "
-        "Для ResNet-56 мы видим разрыв 2.2 п.п. на 60% и 80%, а статья для ResNet-подобных сетей (PreResNet-164, DenseNet-40) показывает паритет и объясняет его почти равномерным распределением прунинга по стадиям (таблицы 18–20)."
+        "Во всех сравнениях SL−UF (таблица, §5 и слайды) используется сид 1: uniform подогнан под архитектуру Slimming сида 1 и обучался один раз. "
+        f"Разность по средним двум сидам Slimming была бы {mean70:+.2f} (VGG-19 70%) и {mean60:+.2f} (ResNet-56 60%); так сравнивать некорректно, потому что у сида 2 архитектура Slimming другая "
+        f"({ours.params('SL-V19-70', 'SE', 2)} параметров против {ours.params('SL-V19-70', 'SE', 1)} у VGG-19 70%; {ours.params('SL-R56-60', 'SE', 2)} против {ours.params('SL-R56-60', 'SE', 1)} у ResNet-56 60%). "
+        "Число параметров uniform подгоняется под архитектуру Slimming сида 1 с допуском до 2% (фактически 0.06–1.8%). Для каждой точки по 1 сиду на uniform, поэтому разности без доверительного интервала."
+    )
+    vg = ", ".join(f"{r['sl_minus_uf']:+.2f}" for r in hyp.get("H3_vgg_rows", []))
+    rn = ", ".join(f"{r['point']}%: {float(r['abs_sl_minus_uf']):.2f}" for r in hyp.get("H3_resnet_rows", []))
+    d.text_block(
+        f"VGG-19: Slimming выигрывает {vg} п.п. при 30/50/70% — аналог рис. 3 на VGG-19 (в статье рис. 3, как и таблицы 7 и 21, построены на VGG-16). "
+        f"На ResNet-56 разрыв |SL−UF| = {rn} п.п. (сид 1). В статье Slimming на ResNet-56 не оценивался; паритет со uniform там виден на PreResNet-164 (рис. 5 слева, таблица 18, ширины почти равномерны по стадиям). "
+        "Для нерегулярного прунинга паритет показан на PreResNet-110 и DenseNet-40 (рис. 5 в центре и справа, таблицы 19–20). "
+        "У меня на ResNet-56 разрыв остаётся, потому что найденные ширины неравномерны по стадиям: размах 0.37–0.39 (см. ниже)."
     )
     d.picture(figs["ours_vgg_uf"], 105)
-    d.text_block("Доли сохранённых каналов по стадиям (сид 1, Scratch-E):", 9.5, bold=True)
+    d.text_block("Доли сохранённых каналов по стадиям:", 9.5, bold=True)
     keep_rows = [["Конфиг", "Доли по стадиям", "Комментарий"]]
     for row in data["ours"].keeps:
         if not (row["cfg"].startswith("SL-") or row["cfg"].startswith("L1-")):
@@ -690,7 +776,7 @@ def write_report(data: dict, path: Path) -> None:
     d.table(keep_rows, [38, 80, 58], size=8, align="LEFT")
     d.text_block(
         "VGG-19 с Slimming режет поздние стадии и почти не трогает ранние: так же, как в таблице 21 статьи. "
-        "ResNet-56 с нашим λ = 1e-5 получает стадийный размах 0.37–0.39 (а не «почти равномерный»), поэтому его паритет с uniform не ожидается."
+        "ResNet-56 с моим λ = 1e-5 получает стадийный размах 0.37–0.39 (а не «почти равномерный»), поэтому паритет с uniform не ожидается."
     )
     d.picture(figs["ours_stage"], 105)
 
@@ -711,8 +797,9 @@ def write_report(data: dict, path: Path) -> None:
     d.table(lat_rows, [64, 28, 28, 28, 28], size=8, align="LEFT")
     d.text_block(
         "Медиана медиан по 5 повторам, FP32 без TF32 и FP16, CUDA events. Нерегулярные маски не мерялись: плотное ядро от маски не ускоряется. "
-        "На batch 1 ResNet-56 упирается в запуск ядер, а не в FLOPs: прунинг 80% даёт 6.2 мс против 7.4 мс у базы. На batch 256 разница заметна: 9.5 мс против 16.5 мс."
+        "В FP32 на batch 1 ResNet-56, вероятно, упирается в запуск ядер, а не в FLOPs: прунинг 80% даёт 6.25 мс против 7.43 мс у базы. На batch 256 разница заметна: 9.47 мс против 16.48 мс."
     )
+    d.text_block(_lat_fp16(lat, ours))
     d.picture(figs["ours_latency"], 150)
 
     d.add_page()
@@ -725,10 +812,10 @@ def write_report(data: dict, path: Path) -> None:
     curve = ", ".join(f"{r['cfg'].replace('SL-R56-', '')}%: {_signed(r['sb_minus_ft'])}" for r in hyp.get("H2_curve_rows", []))
     h_rows.append(["H2, кривая", hyp.get("H2_curve", "нет"), f"SB−FT на SL-R56: {curve}. Прогон без потолка 2× не запускался"])
     vgg = ", ".join(f"{r['point']}%: {_signed(r['sl_minus_uf'])}" for r in hyp.get("H3_vgg_rows", []))
-    h_rows.append(["H3, VGG", hyp.get("H3_vgg", "нет"), f"SL−UF: {vgg}"])
+    h_rows.append(["H3, VGG", hyp.get("H3_vgg", "нет"), f"SL−UF (сид 1): {vgg}"])
     h_rows.append(["H3, guided", hyp.get("H3_gd", "нет"), "GD-прогоны вырезаны бюджетом"])
     res = ", ".join(f"{r['point']}%: {float(r['abs_sl_minus_uf']):.2f}" for r in hyp.get("H3_resnet_rows", []))
-    h_rows.append(["H3, ResNet", hyp.get("H3_resnet", "нет"), f"|SL−UF|: {res}"])
+    h_rows.append(["H3, ResNet", hyp.get("H3_resnet", "нет"), f"|SL−UF| (сид 1): {res}"])
     h_rows.append([
         "H4",
         hyp.get("H4", "нет"),
@@ -737,8 +824,26 @@ def write_report(data: dict, path: Path) -> None:
     d.table(h_rows, [26, 30, 120], size=8.5, align="LEFT")
     d.text_block(
         "Вердикт «не проверено» значит, что прогоны для критерия не запускались. Это не подтверждение и не опровержение. "
-        "Выводы по H1, H2 и H3 (VGG) опираются на 2 сида для основных конфигов и 1 сид для остальных; std между сидами в основном 0.1–0.9 п.п., "
+        "Выводы по H1, H2 и H3 (VGG) опираются на 2 сида для основных конфигов и 1 сид для остальных; std между сидами 0.01–0.87 п.п., "
         "то есть сопоставим с критериями в 0.2–0.3 п.п. Поэтому «подтверждена» для H1 следует читать как «согласуется со статьёй», но не как статистически строгое доказательство."
+    )
+
+    d.text_block("Знак SB−FT и SE−FT по сидам (5 основных конфигов; для SL-V19-70 и SL-R56-60 архитектура сида 2 отличается от сида 1):", 9.5, bold=True)
+    sign_rows = [["Конфиг", "Сид", "SB−FT", "знак", "SE−FT", "знак"]]
+    pos_sb = pos_se = total = 0
+    for cfg in ("L1-V16A", "L1-R56A", "L1-R56B", "SL-V19-70", "SL-R56-60"):
+        for seed in (1, 2):
+            ft, se_, sb_ = (ours.acc_seed(cfg, m, seed) for m in ("FT", "SE", "SB"))
+            if None in (ft, se_, sb_):
+                continue
+            total += 1
+            pos_sb += sb_ - ft > 0
+            pos_se += se_ - ft > 0
+            sign_rows.append([cfg + ("*" if cfg.startswith("L1") else ""), str(seed), f"{sb_ - ft:+.2f}", "+" if sb_ - ft > 0 else "−", f"{se_ - ft:+.2f}", "+" if se_ - ft > 0 else "−"])
+    d.table(sign_rows, [34, 14, 24, 14, 24, 14], size=8)
+    d.text_block(
+        f"SB−FT положительна в {pos_sb} из {total} пар (конфиг, сид), SE−FT — в {pos_se} из {total}. Знак отдельной разности при n=2 ненадёжен, см. строки таблицы с разными знаками у разных сидов. Разности считаются по нескруглённым значениям.",
+        9.5,
     )
 
     d.text_block("6. Отклонения от статьи и ограничения", 13, bold=True)
@@ -746,13 +851,14 @@ def write_report(data: dict, path: Path) -> None:
         "Охват: только CIFAR-10 и VGG-16/19, ResNet-56. Не воспроизводились ImageNet, ThiNet, Regression, SSS, SFP, PreResNet, DenseNet, детекция, CIFAR-100 и transferred guided.",
         "Сиды: 2 у основных конфигов (L1×3, SL-V19-70, SL-R56-60), 1 у остальных; в статье 5. Сид 3 и все прогоны, зависящие от него, вырезаны по бюджету GPU.",
         "Вырезано бюджетом: сиды 2–3 у вторичных конфигов, CIFAR-100, guided pruning, winning ticket, UN-R56-80, Scratch-B без потолка 2×. Порядок и правило резки зафиксированы заранее.",
-        "Конфиги L1-V16A*, L1-R56A*, L1-R56B* восстановлены нами: числа не сопоставимы с таблицей 1 по абсолютной величине.",
+        "Конфиги L1-V16A*, L1-R56A*, L1-R56B* восстановлены мной: числа не сопоставимы с таблицей 1 по абсолютной величине; сопоставимость по степени прунинга с Li et al. не проверена.",
         "Доля прунинга ResNet-56 считается только по внутренним каналам блоков, поэтому не сравнима с таблицами 4 и 18.",
-        "Scratch-B ограничен 2× (в статье такой потолок описан только для ImageNet). Для SL-R56-80 неограниченный вариант не запускался.",
-        "Протокол fine-tune для Slimming в PDF не описан; мы применили тот же, что и для остальных: 40 эпох, постоянный lr 0.001, выбранный на dev-сплите.",
+        "Scratch-B ограничен 2× (в статье такой потолок описан только для ImageNet). Потолок дополнительно урезает бюджет там, где F_L/F_P > 2 (по MAC из приложения): " + _capped(data) + ". Неограниченные варианты не запускались.",
+        "Протокол fine-tune для Slimming в PDF не описан; я применил тот же, что и для остальных: 40 эпох, постоянный lr 0.001, выбранный на dev-сплите.",
         "Обучение в bf16 с автокастом; оценка в FP32. На dev разница bf16/FP32 −0.14 п.п.",
-        "Базовые VGG на тесте ниже статьи на 0.7–0.8 п.п., ResNet-56 на 0.1 п.п. Причину не выясняли.",
-        "Стоимость fine-tune не входит в сравнение бюджетов, как и в статье. Scratch-B получает до 2× эпох базы, поэтому сравнение SB с FT не равное по вычислениям.",
+        "Базовые VGG на тесте ниже статьи на 0.7–0.8 п.п., ResNet-56 на 0.1 п.п. Причину не выяснял.",
+        "Бюджет Scratch-B равен обучению большой сети без fine-tune, то есть меньше полного конвейера (обучение + fine-tune); авторы называют это уступкой в пользу прунинга. Стоимость fine-tune в сравнение не входит, как и в статье. "
+        "Возражение «fine-tune 40 эпох мало» снимается приложением D статьи: таблица 16 (L1-norm, CIFAR-10), fine-tune 80 и 160 эпох заметного прироста не даёт (VGG-16-A: " + f"{paper['table16_ft_epochs_vgg16a']['ft40']:.2f} / {paper['table16_ft_epochs_vgg16a']['ft80']:.2f} / {paper['table16_ft_epochs_vgg16a']['ft160']:.2f}" + "). У меня fine-tune 40 эпох.",
     ]:
         d.text_block("•  " + item, 9.5, gap=1)
 
@@ -760,8 +866,10 @@ def write_report(data: dict, path: Path) -> None:
     d.text_block(
         "Главное утверждение статьи для структурированного прунинга воспроизводится на CIFAR-10: во всех пяти основных конфигах Scratch-B не уступает fine-tune больше чем на 0.2 п.п., "
         "а в четырёх из пяти превосходит его; на ResNet-56 разрыв растёт с долей прунинга. Архитектура, найденная Slimming на VGG-19, даёт больше точности на параметр, чем uniform. "
-        "Не воспроизвелось «исключение» для нерегулярного прунинга при 95% на ResNet-56 (наш Scratch-B выше fine-tune), и паритет Slimming с uniform на ResNet. "
-        "Эти два расхождения мы объясняем различием в архитектурах и недообучением fine-tune, но не проверяли. Winning ticket и guided pruning не проверены."
+        "Паритет Slimming с uniform на ResNet-56 не воспроизвёлся (в статье паритет показан на PreResNet-164, а не на ResNet-56). "
+        "Исключение для нерегулярного прунинга в статье — ImageNet и 95% на PreResNet-110 и DenseNet-BC-100; их я не проверял. На VGG-19 при 95% и у статьи, и у меня Scratch-B ≥ fine-tune. "
+        "H4 опиралась на перенос поведения PreResNet-110 на ResNet-56; это допущение, а не результат статьи, и в таком виде H4 опровергнута (SB−FT " + f"{hyp.get('H4_un95_sb_minus_ft', 0):+.2f}" + " п.п. при 95%). "
+        "Расхождения предполагаю объяснять различием архитектур и недообучением fine-tune; это не проверялось. Winning ticket и guided pruning не проверены."
     )
 
     d.text_block("8. Воспроизводимость", 13, bold=True)
@@ -783,6 +891,11 @@ def write_report(data: dict, path: Path) -> None:
 
     d.add_page()
     d.text_block("Приложение. Все результаты на тесте (последняя эпоха, mean ± std по сидам)", 12, bold=True)
+    d.text_block(
+        "BASE — база, обученная обычным образом. BASES — база, обученная с L1-штрафом Slimming на γ BatchNorm; из неё берутся архитектуры Slimming и она служит «исходной» сетью в строках SL. "
+        "PRUNE — шаг прунинга без обучения (точности нет). FT, SE, SB, UF — fine-tune, Scratch-E, Scratch-B, uniform с нуля. MAC — умножения-сложения на одну картинку 32×32.",
+        9,
+    )
     rows = [["Конфиг", "Режим", "n", "Точность, %", "Параметров", "MAC"]]
     for r in data["summary"]:
         rows.append([r["cfg"], r["mode"], r["n"], r["test_acc"], r["params"], r["macs"]])
