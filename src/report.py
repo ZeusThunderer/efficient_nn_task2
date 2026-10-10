@@ -42,7 +42,11 @@ def _load() -> dict:
     return {
         "summary": _read_csv(TABLES / "summary.csv"),
         "runs": _read_csv(TABLES / "runs.csv"),
-        "dev": _read_csv(ROOT / "dev" / "summary.csv"),
+        "dev": [
+            row
+            for row in _read_csv(ROOT / "dev" / "summary.csv")
+            if str(row.get("run_id", "")).startswith("dev-") and row.get("val_acc")
+        ],
         "latency": _read_csv(TABLES / "latency.csv"),
         "hyp": hyp,
         "inv": inv,
@@ -205,13 +209,21 @@ def write_report(data: dict, path: Path) -> None:
     pdf.h2("Бюджет")
     f0 = data["plans"].get("f0", {})
     if f0:
-        pdf.p(f"G1: t_ep={f0.get('t_ep')}, phi={f0.get('phi')}, K={f0.get('k')}, peak_mb={f0.get('peak_mb')}.")
-    for name in ("plan_f0", "plan_f1", "plan_f2"):
-        plan = data["plans"].get(name)
-        if not plan:
-            continue
-        enabled = sum(1 for row in plan.get("runs", []) if row.get("enabled"))
-        pdf.small(f"{name}: allowance {plan.get('allowance_h')} ч, план {plan.get('cost_h')} ч, включено {enabled}.")
+        pdf.p(
+            f"G1: секунд на эпоху {f0.get('t_ep')}, phi={f0.get('phi')}, K={f0.get('k')}. "
+            "Два прогона на одной 5070 Ti не обогнали сумму эпох, очередь шла в один поток."
+        )
+    last = data["plans"].get("plan_f2") or data["plans"].get("plan_f1") or {}
+    if last:
+        runs = last.get("runs", [])
+        enabled = [row for row in runs if row.get("enabled")]
+        cut = [row for row in runs if not row.get("enabled")]
+        pdf.p(
+            f"Допуск {last.get('allowance_h')} ч, смета полного включённого набора {last.get('cost_h')} ч. "
+            f"Включено {len(enabled)}, вырезано {len(cut)}. "
+            "Фаза 3 (сиды 2–3 для P2a и весь P2b: CIFAR-100, guided, winning ticket, SBU, нерегулярный ResNet 80%) не запускалась. "
+            "Сид 3 у основных конфигов тоже вырезан, поэтому H1 посчитана по двум сидам."
+        )
     pdf.h2("Инварианты")
     if data["inv"].get("ok"):
         pdf.p("Проверки агрегатора прошли.")
@@ -328,9 +340,11 @@ def write_slides(data: dict, path: Path) -> None:
         ),
         (
             "Вывод",
-            "Смотрите вердикты H1–H4 на предыдущих слайдах: они посчитаны из test_acc последней эпохи.\n"
-            "Если абсолютная точность ниже статьи, сравнение методов всё равно действительно внутри одного цикла.\n"
-            "Вырезанный подкритерий — это «не проверено», а не подтверждение.",
+            f"H1: {hyp.get('H1', 'нет данных')}. H1c: {hyp.get('H1c', 'нет данных')}.\n"
+            f"H2 бюджет: {hyp.get('H2_budget', 'нет данных')}. H2 кривая Slimming: {hyp.get('H2_curve', 'нет данных')}.\n"
+            f"H3 VGG: {hyp.get('H3_vgg', 'нет данных')}. H3 guided: {hyp.get('H3_gd', 'нет данных')}. H3 ResNet: {hyp.get('H3_resnet', 'нет данных')}.\n"
+            f"H4: {hyp.get('H4', 'нет данных')}.\n"
+            "Вырезанный подкритерий записан как «не проверено». Абсолютная точность ниже статьи не отменяет сравнение внутри одного цикла.",
         ),
     ]
     for title, body in slides:
